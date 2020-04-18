@@ -67,7 +67,7 @@ ytdlopts = {
 }
 
 ffmpegopts = {
-	'before_options': '-nostdin',
+	'before_options': '-reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 60',
 	'options': '-vn'
 }
 
@@ -115,7 +115,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
 		else:
 			return {'webpage_url': data['webpage_url'], 'requester': ctx.author, 'title': data['title']}
 
-		return cls(discord.FFmpegPCMAudio(source,before_options=" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"), data=data, requester=ctx.author)
+		return cls(discord.FFmpegPCMAudio(source, **ffmpegopts), data=data, requester=ctx.author)
 
 	@classmethod
 	async def regather_stream(cls, data, *, loop):
@@ -127,7 +127,7 @@ class YTDLSource(discord.PCMVolumeTransformer):
 		to_run = partial(ytdl.extract_info, url=data['webpage_url'], download=False)
 		data = await loop.run_in_executor(None, to_run)
 
-		return cls(discord.FFmpegPCMAudio(data['url'], before_options=" -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5"), data=data, requester=requester)
+		return cls(discord.FFmpegPCMAudio(data['url'], **ffmpegopts), data=data, requester=requester)
 
 
 class MusicPlayer:
@@ -161,13 +161,15 @@ class MusicPlayer:
 		while True:
 			self.next.clear()
 
+			
 			try:
 				# Wait for the next song. If we timeout cancel the player and disconnect...
-				async with timeout(36000):  # 5 minutes...
+				async with timeout(60):  # 5 minutes...
 					source = await self.queue.get()
 			except asyncio.TimeoutError:
 				return self.destroy(self._guild)
-
+			
+			
 			if not isinstance(source, YTDLSource):
 				# Source was probably a stream (not downloaded)
 				# So we should regather to prevent stream expiration
@@ -270,7 +272,7 @@ class Music(commands.Cog):
 				raise VoiceConnectionError(f':no_entry_sign: 채널 이동 : <{channel}> 시간 초과.')
 		else:
 			try:
-				await channel.connect()
+				await channel.connect(reconnect=True)
 			except asyncio.TimeoutError:
 				raise VoiceConnectionError(f':no_entry_sign: 채널 접속: <{channel}> 시간 초과.')
 
@@ -439,13 +441,13 @@ async def on_ready():
 	print(bot.user.name)
 	print(bot.user.id)
 	print("===========")
-	
+
 @bot.event
 async def on_command_error(ctx, error):
 	if isinstance(error, CommandNotFound):
 		return
 	raise error
-
+			       
 bot.add_cog(Music(bot))
 bot.run(access_token)
 
